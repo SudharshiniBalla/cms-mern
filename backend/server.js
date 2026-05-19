@@ -1,63 +1,26 @@
 const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
-const rateLimit = require('express-rate-limit');
-require('dotenv').config();
 
-const app = express();
-
-// Security Middleware
-app.use(helmet());
-app.use(morgan('dev'));
-
-// Trust proxy (fix for X-Forwarded-For warning)
-app.set('trust proxy', 1);
-
-// Rate Limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: 'Too many requests from this IP, please try again later.',
-  validate: { xForwardedForHeader: false },
-});
-app.use('/api/', limiter);
-
-// CORS
-app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
-
-// Body Parser
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Routes
-app.use('/api/auth', require('./routes/authRoutes'));
-app.use('/api/users', require('./routes/userRoutes'));
-app.use('/api/pages', require('./routes/pageRoutes'));
-app.use('/api/templates', require('./routes/templateRoutes'));
-app.use('/api/media', require('./routes/mediaRoutes'));
-app.use('/api/analytics', require('./routes/analyticsRoutes'));
-app.use('/api/settings', require('./routes/settingsRoutes'));
-
-// Health Check
+// Health Route
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({
+    success: true,
+    message: 'Server is running successfully',
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // 404 Handler
 app.use((req, res) => {
-  res.status(404).json({ success: false, message: 'Route not found' });
+  res.status(404).json({
+    success: false,
+    message: 'Route not found',
+  });
 });
 
-// Error Handler
+// Global Error Handler
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  console.error('ERROR:', err.stack);
+
   res.status(err.statusCode || 500).json({
     success: false,
     message: err.message || 'Internal Server Error',
@@ -67,18 +30,30 @@ app.use((err, req, res, next) => {
 // MongoDB Connection
 const connectDB = async () => {
   try {
+    if (!process.env.MONGODB_URI) {
+      throw new Error('MONGODB_URI is missing in environment variables');
+    }
+
     const conn = await mongoose.connect(process.env.MONGODB_URI);
+
     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {
-    console.error('❌ MongoDB connection error:', error.message);
+    console.error('❌ MongoDB Connection Failed');
+    console.error(error.message);
     process.exit(1);
   }
 };
 
 const PORT = process.env.PORT || 5000;
 
-connectDB().then(() => {
+// Start Server
+const startServer = async () => {
+  await connectDB();
+
   app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   });
-});
+};
+
+startServer();
